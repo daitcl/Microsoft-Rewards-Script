@@ -4,13 +4,15 @@
 ---
 
 <div align="center">
-  <img src="https://img.shields.io/github/last-commit/daitcl/Microsoft-Rewards-Script" alt="最后提交">
-  <img src="https://img.shields.io/github/actions/workflow/status/daitcl/Microsoft-Rewards-Script/check-version.yml" alt="构建状态">
-  <a href="https://github.com/daitcl/Microsoft-Rewards-Script/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/License-GPL--3.0--or--later-blue?style=flat-square" alt="GPL-3.0 许可证">
+  <a href="https://github.com/daitcl/Microsoft-Rewards-Script/actions/workflows/check-version.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/daitcl/Microsoft-Rewards-Script/check-version.yml?branch=main&label=auto-build" alt="自动构建状态">
   </a>
+  <img src="https://img.shields.io/github/last-commit/daitcl/Microsoft-Rewards-Script?label=last%20commit" alt="最后提交">
   <a href="https://github.com/daitcl/Microsoft-Rewards-Script/pkgs/container/microsoft-rewards-script">
     <img src="https://img.shields.io/badge/GHCR.io-Package-blue?logo=github" alt="GHCR Package">
+  </a>
+  <a href="https://github.com/daitcl/Microsoft-Rewards-Script/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/License-GPL--3.0--or--later-blue?style=flat-square" alt="GPL-3.0 许可证">
   </a>
 </div>
 
@@ -22,25 +24,51 @@
 
 ## 📦 镜像地址
 
-[ghcr.io/daitcl/microsoft-rewards-script:latest](https://ghcr.io/daitcl/microsoft-rewards-script:latest)
-
-拉取示例：
-
 ```bash
 docker pull ghcr.io/daitcl/microsoft-rewards-script:latest
 ```
 
+浏览所有版本：[GHCR Package](https://github.com/daitcl/Microsoft-Rewards-Script/pkgs/container/microsoft-rewards-script)
+
+### 可用标签（Tag）
+
+每次构建会自动推送以下标签，均指向同一镜像：
+
+| 标签 | 说明 | 示例 |
+| :--- | :--- | :--- |
+| `latest` | 最新一次成功构建 | `latest` |
+| `<version>` | 上游 `package.json` 精确版本号 | `4.3.2.3` |
+| `v<version>` | 带 `v` 前缀，符合语义化习惯 | `v4.3.2.3` |
+| `sha-<short>` | 对应上游源码提交短 SHA，便于追溯 | `sha-a1b2c3d` |
+
+**推荐固定到具体版本**，避免 `latest` 漂移导致行为变化：
+
+```bash
+docker pull ghcr.io/daitcl/microsoft-rewards-script:v4.3.2.3
+```
+
 ------
 
-## 🔧 触发构建
+## 🔧 自动化构建机制
+
+本仓库镜像由两个 GitHub Actions 工作流协作完成，**无需手动干预**：
+
+| 工作流 | 作用 | 触发方式 |
+| :--- | :--- | :--- |
+| `check-version.yml` | 定时读取上游 `package.json`，比对 GHCR 上是否已有对应版本镜像；若无则调用构建 | 每天定时（UTC 03:00 / 北京 11:00），也支持手动触发 |
+| `build.yml` | 实际执行 Docker 构建并推送镜像到 GHCR | 被 `check-version.yml` 调用，或手动触发 |
+
+**判断逻辑**：若 GHCR 上已存在 `v<version>` 标签，则跳过构建，避免重复；否则自动构建并推送。
+
+### 手动触发（特殊需求）
+
+仅当你需要**强制重建当前版本**（例如上游同版本号但源码有变动、或需要刷新缓存）时，才需手动触发：
 
 1. 打开仓库 **Actions** 标签页
 2. 左侧选择 **Build and Push Docker Image**
 3. 点击 **Run workflow**
-   - `tag`：自定义镜像标签（默认 `latest`）
-4. 等待构建完成（首次约 3–8 分钟，之后走缓存更快）
-
-构建产物会自动推送至 GHCR，并附带 `sha-<commit>` 标签便于追溯源码版本。
+   - `tag`：自定义额外镜像标签（默认 `latest`）
+4. 首次约 3–8 分钟，之后走缓存更快
 
 ------
 
@@ -126,20 +154,36 @@ docker compose up -d       # 使用新镜像重建容器
 | `API_MODE`                                                | 开启控制 API                                 | `false`                  |
 | `API_TOKEN`                                               | API 鉴权令牌                                 | 空                       |
 
-完整 `CONFIG_*` 变量列表请参考[上游 README 配置参考](https://github.com/chiihero/Microsoft-Rewards-Script/tree/V4-china#️-配置参考)。
+完整 `CONFIG_*` 变量列表请参考[上游 README 配置参考](https://github.com/chiihero/Microsoft-Rewards-Script/tree/V4-china)。
 
 ------
 
 ## 🔄 更新镜像
 
-当上游 `V4-china` 分支更新后：
+### 自动更新（推荐）
 
-1. 在 **Actions** 页面重新触发 **Run workflow**
-2. 构建完成后本地拉取新镜像并重建容器：
+镜像构建由 `check-version.yml` **每天定时检测上游 `package.json` 版本**：
+
+- 检测到**新版本** → 自动触发构建 → 推送新镜像到 GHCR
+- 版本未变 → 跳过，不产生冗余构建
+
+你只需在本地拉取并重建容器：
 
 ```bash
 docker compose pull
 docker compose up -d
+```
+
+### 手动更新（强制重建同版本）
+
+若上游源码有变动但版本号未更新，可在 **Actions → Build and Push Docker Image → Run workflow** 手动触发一次，然后同样执行上述 `pull` + `up -d`。
+
+### 固定版本（生产环境推荐）
+
+不希望被自动更新影响，可将 `compose.yaml` 中的 `image` 改为具体版本：
+
+```yaml
+image: ghcr.io/daitcl/microsoft-rewards-script:v4.3.2.3
 ```
 
 ------
@@ -150,13 +194,21 @@ Docker / GHCR 要求**仓库名必须小写**，因此镜像引用固定为 `mic
 
 ------
 
-## 📄 许可证
+## 📄 许可证与源码
 
 > 协议：[GPL-3.0-or-later](LICENSE) — 本程序为自由软件，您可以依据自由软件基金会发布的 GNU 通用公共许可证（第 3 版或任何更新版本）的条款重新分发和/或修改它。分发本程序或其衍生作品时，必须同样以 GPL 授权，并提供完整对应源码。
 >
-> 免责声明：本程序按“原样”提供，不附带任何明示或暗示的保证，包括但不限于适销性和特定用途适用性的保证。在任何情况下，作者或版权持有人均不对任何索赔、损害或其他责任负责，无论是在合同诉讼、侵权诉讼或其他诉讼中，由于软件或软件的使用或其他交易引起的。
+> **免责声明**：本程序按"原样"提供，不附带任何明示或暗示的保证，包括但不限于适销性和特定用途适用性的保证。在任何情况下，作者或版权持有人均不对任何索赔、损害或其他责任负责，无论是在合同诉讼、侵权诉讼或其他诉讼中，由于软件或软件的使用或其他交易引起的。
 >
-> **风险自负**：使用自动化脚本可能导致 Microsoft Rewards 账户被暂停或封禁。本项目仅供教育目的，作者不对 Microsoft 采取的任何账户操作承担责任。
+> **风险自负**：使用自动化脚本可能导致 Microsoft Rewards 账户被暂停或封禁。作者不对 Microsoft 采取的任何账户操作承担责任。
+
+依据 GPL v3 §6，本镜像的对应源码可在此获取：
+
+- 上游仓库：<https://github.com/chiihero/Microsoft-Rewards-Script/tree/V4-china>
+- 精确提交：见镜像标签 `sha-<short>`（每次构建自动生成）
+- 本仓库构建脚本：`.github/workflows/build.yml`、`.github/workflows/check-version.yml`
+
+本仓库不修改上游源码，仅提供 CI 构建与镜像分发；分发镜像时同样遵循 GPL-3.0 条款。
 
 ------
 
@@ -168,4 +220,4 @@ Docker / GHCR 要求**仓库名必须小写**，因此镜像引用固定为 `mic
 | 再上游   | [TheNetsky/Microsoft-Rewards-Script](https://github.com/TheNetsky/Microsoft-Rewards-Script)（v4 分支） |
 | 本仓库   | [daitcl/Microsoft-Rewards-Script](https://github.com/daitcl/Microsoft-Rewards-Script)（镜像构建） |
 
-本项目不修改源码，仅提供 CI 构建与镜像分发；分发镜像时同样遵循 GPL-3.0 条款，完整源码请向上游仓库获取。
+完整源码请向上游仓库获取。
