@@ -1,0 +1,79 @@
+name: Check Version & Trigger Build
+
+on:
+  schedule:
+    # UTC 03:00 = 北京时间 11:00，可按需调整
+    - cron: '0 3 * * *'
+  workflow_dispatch:      # 保留手动触发，方便调试
+
+concurrency:
+  group: check-version
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: 检查 package.json 版本
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      version: ${{ steps.pkg.outputs.version }}
+      should_build: ${{ steps.check.outputs.should_build }}
+
+    steps:
+      - name: 仅拉取 package.json（sparse-checkout）
+        uses: actions/checkout@v4
+        with:
+          repository: chiihero/Microsoft-Rewards-Script
+          ref: V4-china
+          path: source
+          sparse-checkout: |
+            package.json
+          sparse-checkout-cone-mode: false
+
+      - name: 读取版本号
+        id: pkg
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./source/package.json').version")
+          if [ -z "$VERSION" ]; then
+            echo "❌ 未能从 package.json 读取 version 字段"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Package version: ${VERSION}"
+
+      - name: 检查 GHCR 是否已存在该版本
+        id: check
+        shell: bash
+        env:
+          VERSION: ${{ steps.pkg.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          OWNER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          IMAGE="ghcr.io/${OWNER}/microsoft-rewards-script"
+
+          # 用 GitHub API 查询 tag，比 docker manifest inspect 更轻量
+          # 也避免登录/拉取 manifest 的开销
+          if gh api "/orgs/${OWNER}/packages/container/microsoft-rewards-script/versions" \
+               -H "Accept: application/vnd.github+json" 2>/dev/null \
+             | grep -q "\"v${VERSION}\"\|:v${VERSION}\""; then
+            echo "✅ 镜像 ${IMAGE}:v${VERSION} 已存在，跳过构建"
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "🆕 镜像 ${IMAGE}:v${VERSION} 不存在，需要构建"
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: 调用构建工作流
+    needs: check
+    if: needs.check.outputs.should_build == 'true'
+    # ⚠️ reusable workflow 的权限是调用方授予的上限，必须显式声明
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build.yml
+    with:
+      tag: latest

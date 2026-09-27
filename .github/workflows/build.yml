@@ -8,6 +8,13 @@ on:
         required: false
         default: 'latest'
         type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: '镜像标签 (Tag)'
+        required: false
+        default: 'latest'
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -37,6 +44,18 @@ jobs:
           echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
           echo "Source commit: ${SHA}"
 
+      - name: 读取 package.json 版本号
+        id: pkg
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./source/package.json').version")
+          if [ -z "$VERSION" ]; then
+            echo "❌ 未能从 package.json 读取 version 字段"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Package version: ${VERSION}"
+
       - name: 设置 Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -51,7 +70,6 @@ jobs:
         id: image
         shell: bash
         run: |
-          # GHCR owner 必须小写
           OWNER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
           IMAGE_REF="${REGISTRY}/${OWNER}/${IMAGE_NAME}"
           echo "ref=${IMAGE_REF}" >> "$GITHUB_OUTPUT"
@@ -64,11 +82,14 @@ jobs:
           file: ./source/Dockerfile
           push: true
           tags: |
+            ${{ steps.image.outputs.ref }}:${{ steps.pkg.outputs.version }}
+            ${{ steps.image.outputs.ref }}:v${{ steps.pkg.outputs.version }}
             ${{ steps.image.outputs.ref }}:${{ inputs.tag }}
             ${{ steps.image.outputs.ref }}:sha-${{ steps.source_sha.outputs.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/chiihero/Microsoft-Rewards-Script
             org.opencontainers.image.revision=${{ steps.source_sha.outputs.sha }}
+            org.opencontainers.image.version=${{ steps.pkg.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -81,11 +102,12 @@ jobs:
             echo "| 项目 | 值 |"
             echo "| --- | --- |"
             echo "| 镜像 | \`${{ steps.image.outputs.ref }}\` |"
-            echo "| 标签 | \`${{ inputs.tag }}\` |"
+            echo "| Package 版本 | \`${{ steps.pkg.outputs.version }}\` |"
+            echo "| 手动 Tag | \`${{ inputs.tag }}\` |"
             echo "| 源码提交 | \`sha-${{ steps.source_sha.outputs.sha }}\` |"
             echo ""
             echo "### 拉取命令"
             echo '```bash'
-            echo "docker pull ${{ steps.image.outputs.ref }}:${{ inputs.tag }}"
+            echo "docker pull ${{ steps.image.outputs.ref }}:${{ steps.pkg.outputs.version }}"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
