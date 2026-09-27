@@ -5,7 +5,7 @@
 
 <div align="center">
   <img src="https://img.shields.io/github/last-commit/daitcl/Microsoft-Rewards-Script" alt="最后提交">
-  <img src="https://img.shields.io/github/actions/workflow/status/daitcl/Microsoft-Rewards-Script/docker-build.yml" alt="构建状态">
+  <img src="https://img.shields.io/github/actions/workflow/status/daitcl/Microsoft-Rewards-Script/build.yml" alt="构建状态">
   <a href="https://github.com/daitcl/Microsoft-Rewards-Script/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/License-GPL--3.0--or--later-blue?style=flat-square" alt="GPL-3.0 许可证">
   </a>
