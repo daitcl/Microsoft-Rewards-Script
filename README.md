@@ -22,10 +22,8 @@
 
 ## 📦 镜像地址
 
-```text
 [ghcr.io/daitcl/microsoft-rewards-script:latest](https://ghcr.io/daitcl/microsoft-rewards-script:latest)
-[ghcr.io/daitcl/microsoft-rewards-script:sha-<](https://ghcr.io/daitcl/microsoft-rewards-script:sha-<)短SHA>
-```
+
 拉取示例：
 
 ```bash
